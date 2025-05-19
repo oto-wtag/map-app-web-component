@@ -1,61 +1,219 @@
-import React from "react";
-import Map, { Marker } from "react-map-gl/mapbox";
+import React, { useRef, useCallback, useMemo } from "react";
+import Map, { Marker, Source, Layer } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-const PinIcon = ({ size = 24, color = "red" }) => (
-  <svg
-    height={size}
-    viewBox="0 0 24 24"
-    style={{
-      fill: color,
-      stroke: "white", // Optional: for better visibility on dark maps
-      strokeWidth: 1, // Optional
-      cursor: "pointer", // Optional: if you plan to add click events
-      // The `transform` helps to position the tip of the pin at the coordinate
-      // This is an alternative to using the anchor prop on <Marker> if your icon's
-      // visual point isn't naturally at one of the anchor presets.
-      // However, for this pin shape, anchor="bottom" on <Marker> is often preferred.
-      // transform: `translate(${-size / 2}px, ${-size}px)`
-    }}
-  >
-    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 010-5 2.5 2.5 0 010 5z" />
-  </svg>
-);
+const allLocations = [
+  // Dhaka
+  {
+    id: "lalbagh_fort",
+    name: "Lalbagh Fort",
+    longitude: 90.3899,
+    latitude: 23.7193,
+  },
+  {
+    id: "ahsan_manzil",
+    name: "Ahsan Manzil",
+    longitude: 90.4048,
+    latitude: 23.7088,
+  },
+  {
+    id: "parliament_house",
+    name: "National Parliament House",
+    longitude: 90.3786,
+    latitude: 23.7626,
+  },
+  {
+    id: "dhaka_university",
+    name: "Dhaka University",
+    longitude: 90.3995,
+    latitude: 23.7345,
+  },
+  {
+    id: "hatirjheel",
+    name: "Hatirjheel",
+    longitude: 90.3973,
+    latitude: 23.7498,
+  },
+  {
+    id: "gulshan_lake_park",
+    name: "Gulshan Lake Park",
+    longitude: 90.4163,
+    latitude: 23.7925,
+  },
+  {
+    id: "banani_11",
+    name: "Banani Road 11",
+    longitude: 90.4078,
+    latitude: 23.794,
+  },
+  {
+    id: "uttara_sector_10_park",
+    name: "Uttara Sector 10 Park",
+    longitude: 90.397,
+    latitude: 23.87,
+  },
+  { id: "mirpur_zoo", name: "Mirpur Zoo", longitude: 90.35, latitude: 23.8 },
+  { id: "new_market", name: "New Market", longitude: 90.386, latitude: 23.73 },
+
+  // Chittagong
+  { id: "foy_lake", name: "Foy's Lake", longitude: 91.79, latitude: 22.36 },
+  {
+    id: "patenga_beach",
+    name: "Patenga Beach",
+    longitude: 91.7833,
+    latitude: 22.2833,
+  },
+  {
+    id: "ctg_war_cemetery",
+    name: "Chittagong War Cemetery",
+    longitude: 91.8167,
+    latitude: 22.35,
+  },
+  {
+    id: "batali_hill",
+    name: "Batali Hill",
+    longitude: 91.82,
+    latitude: 22.355,
+  },
+  {
+    id: "kaptai_lake_ctg_view",
+    name: "Kaptai Lake (Chittagong View Area)",
+    longitude: 91.83,
+    latitude: 22.37,
+  }, // Fictional, for clustering
+  {
+    id: "agrabad_circle",
+    name: "Agrabad Circle",
+    longitude: 91.8,
+    latitude: 22.33,
+  },
+
+  // Sylhet
+  {
+    id: "shahjalal_shrine",
+    name: "Shahjalal Shrine",
+    longitude: 91.868,
+    latitude: 24.895,
+  },
+  { id: "jaflong", name: "Jaflong", longitude: 92.0167, latitude: 25.1667 },
+  {
+    id: "ratargul_swamp",
+    name: "Ratargul Swamp Forest",
+    longitude: 91.9833,
+    latitude: 25.0,
+  },
+  { id: "bisnakandi", name: "Bisnakandi", longitude: 91.9, latitude: 25.15 },
+  {
+    id: "syl_shahi_eidgah",
+    name: "Sylhet Shahi Eidgah",
+    longitude: 91.875,
+    latitude: 24.9,
+  },
+  {
+    id: "keen_bridge",
+    name: "Keen Bridge",
+    longitude: 91.8667,
+    latitude: 24.89,
+  },
+];
+
+// Define layer styles for clusters and points
+const clusterLayer = {
+  id: "clusters",
+  type: "circle",
+  source: "locations-source", // Make sure this matches the Source ID
+  filter: ["has", "point_count"],
+  paint: {
+    "circle-color": [
+      "step",
+      ["get", "point_count"],
+      "#51bbd6",
+      10,
+      "#f1f075",
+      50,
+      "#f28cb1",
+    ],
+    "circle-radius": ["step", ["get", "point_count"], 15, 10, 20, 50, 25], // point_count < 10 -> 15px, 10 <= point_count < 50 -> 20px, point_count >= 50 -> 25px
+  },
+};
+
+const clusterCountLayer = {
+  id: "cluster-count",
+  type: "symbol",
+  source: "locations-source",
+  filter: ["has", "point_count"],
+  layout: {
+    "text-field": "{point_count_abbreviated}",
+    "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
+    "text-size": 12,
+  },
+  paint: {
+    "text-color": "#ffffff",
+  },
+};
+
+const unclusteredPointLayer = {
+  id: "unclustered-point",
+  type: "circle",
+  source: "locations-source",
+  filter: ["!", ["has", "point_count"]],
+  paint: {
+    "circle-color": "#11b4da",
+    "circle-radius": 6,
+    "circle-stroke-width": 1,
+    "circle-stroke-color": "#fff",
+  },
+};
 
 const MapComponent = ({ mapboxAccessToken }) => {
   //const mapboxAccessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 
-  const locations = [
-    {
-      id: "lalbagh_fort",
-      name: "Lalbagh Fort",
-      longitude: 90.3899,
-      latitude: 23.7193,
-    },
-    {
-      id: "ahsan_manzil",
-      name: "Ahsan Manzil",
-      longitude: 90.4048,
-      latitude: 23.7088,
-    },
-    {
-      id: "parliament_house",
-      name: "National Parliament House",
-      longitude: 90.3786,
-      latitude: 23.7626,
-    },
-    {
-      id: "dhaka_university",
-      name: "Dhaka University",
-      longitude: 90.3995,
-      latitude: 23.7345,
-    },
-  ];
+  const mapRef = useRef(null);
+
+  // Memoize GeoJSON conversion
+  const geoJsonData = useMemo(() => {
+    return {
+      type: "FeatureCollection",
+      features: allLocations.map((loc) => ({
+        type: "Feature",
+        properties: { id: loc.id, name: loc.name }, // Add any other properties you need
+        geometry: {
+          type: "Point",
+          coordinates: [loc.longitude, loc.latitude],
+        },
+      })),
+    };
+  }, []); // Dependency array is empty as allLocations is constant here
+
+  // Callback for clicking on the map, specifically for clusters
+  const onClick = useCallback((event) => {
+    if (!mapRef.current) return;
+
+    const features = event.features;
+    if (features && features.length > 0) {
+      const feature = features[0];
+      // Ensure the clicked feature is from our cluster layer
+      if (feature.layer.id === "clusters") {
+        const clusterId = feature.properties.cluster_id;
+        const mapboxSource = mapRef.current.getSource("locations-source"); // Ensure source ID matches
+
+        mapboxSource.getClusterExpansionZoom(clusterId, (err, zoom) => {
+          if (err) {
+            console.error("Error getting cluster expansion zoom:", err);
+            return;
+          }
+          mapRef.current.easeTo({
+            center: feature.geometry.coordinates,
+            zoom: zoom + 0.5, // Add a little extra zoom
+            duration: 500,
+          });
+        });
+      }
+    }
+  }, []);
 
   if (!mapboxAccessToken) {
-    console.error(
-      "Mapbox Access Token is not set. Please set VITE_MAPBOX_ACCESS_TOKEN in your .env file."
-    );
+    console.error("Mapbox Access Token is not set.");
     return (
       <div
         style={{
@@ -75,30 +233,47 @@ const MapComponent = ({ mapboxAccessToken }) => {
 
   return (
     <Map
+      ref={mapRef}
       mapboxAccessToken={mapboxAccessToken}
       initialViewState={{
-        longitude: 90.4125, // Central Dhaka
-        latitude: 23.7803, // Slightly adjusted to better center the sample markers
-        zoom: 12, // Adjusted zoom to make sure markers are visible
+        longitude: 90.8, // Adjusted to better show Bangladesh
+        latitude: 23.5, // Adjusted to better show Bangladesh
+        zoom: 6.5, // Zoom out to see multiple cities
       }}
       style={{
         width: "100%",
         height: "100%",
         position: "relative",
-      }} // Make the map take the full viewport
-      //mapStyle="mapbox://styles/mapbox/streets-v12" // Default Mapbox street style
-      mapStyle="mapbox://styles/faizajarin12/cm8pfng64006y01sh6hjsgmc6"
+      }}
+      //mapStyle="mapbox://styles/mapbox/streets-v12" // Using a standard style
+      mapStyle="mapbox://styles/faizajarin12/cm8pfng64006y01sh6hjsgmc6" // Your custom style
+      onClick={onClick}
+      interactiveLayerIds={[clusterLayer.id]} // Important: makes clusters clickable
     >
-      {locations.map((location) => (
-        <Marker
-          key={location.id}
-          longitude={location.longitude}
-          latitude={location.latitude}
-          anchor="bottom" // Adjusted anchor to bottom for better pin placement
-        >
-          <PinIcon size={30} color="red" />
-        </Marker>
-      ))}
+      <Source
+        id="locations-source" // Unique ID for this source
+        type="geojson"
+        data={geoJsonData}
+        cluster={true}
+        clusterMaxZoom={14} // Max zoom to cluster points on
+        clusterRadius={50} // Radius of each cluster when clustering points (defaults to 50)
+      >
+        {/* Layer for the clusters themselves (circles) */}
+        <Layer {...clusterLayer} />
+        {/* Layer for the text count on clusters */}
+        <Layer {...clusterCountLayer} />
+        {/* Layer for unclustered points */}
+        <Layer {...unclusteredPointLayer} />
+      </Source>
+
+      {/* If you wanted to show custom React <Marker> components for UNCLUSTERED points,
+        you would need a more complex logic:
+        1. Listen to map data events (e.g., 'sourcedata') or moveend.
+        2. Query the 'locations-source' for unclustered points: map.querySourceFeatures('locations-source', { filter: ['!', ['has', 'point_count']] })
+        3. Store these features in React state.
+        4. Render <Marker> components based on this state.
+        This is more involved than using Mapbox GL JS layers directly.
+      */}
     </Map>
   );
 };
