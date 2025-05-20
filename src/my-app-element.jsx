@@ -1,6 +1,6 @@
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
-import r2wc from "@r2wc/react-to-webcomponent"; // Import r2wc
+import r2wc from "@r2wc/react-to-web-component"; // Import r2wc
 
 import App from "./App.jsx";
 
