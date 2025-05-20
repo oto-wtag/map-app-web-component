@@ -280,8 +280,9 @@
 
 // export default MapComponent;
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback, useMemo } from "react";
 import mapboxgl from "mapbox-gl";
+//import Map, { Marker, Source, Layer } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 const allLocations = [
