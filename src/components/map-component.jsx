@@ -1,11 +1,5 @@
-import React, {
-  useEffect,
-  useRef,
-  useState,
-  useCallback,
-  useMemo,
-} from "react";
-import mapboxgl from "mapbox-gl";
+import React, { useRef, useState, useCallback, useMemo } from "react";
+// Removed unused mapboxgl import
 import Map, {
   Source,
   Layer,
@@ -13,6 +7,15 @@ import Map, {
   AttributionControl,
 } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
+
+// Log imported components to check if they are defined
+console.log("Imported Mapbox Components:", {
+  Map,
+  Source,
+  Layer,
+  Popup,
+  AttributionControl,
+});
 
 const redMarkerSvgString = `
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48px" height="48px">
@@ -31,12 +34,7 @@ const allLocations = [
     longitude: 7.7316,
     latitude: 47.4843,
   },
-  {
-    id: "basel_sbb",
-    name: "Basel SBB",
-    longitude: 7.589,
-    latitude: 47.547,
-  },
+  { id: "basel_sbb", name: "Basel SBB", longitude: 7.589, latitude: 47.547 },
   {
     id: "university_basel",
     name: "University of Basel",
@@ -49,18 +47,8 @@ const allLocations = [
     longitude: 7.595,
     latitude: 47.556,
   },
-  {
-    id: "spalentor",
-    name: "Spalentor",
-    longitude: 7.5778,
-    latitude: 47.5607,
-  },
-  {
-    id: "zoo_basel",
-    name: "Zoo Basel",
-    longitude: 7.5775,
-    latitude: 47.552,
-  },
+  { id: "spalentor", name: "Spalentor", longitude: 7.5778, latitude: 47.5607 },
+  { id: "zoo_basel", name: "Zoo Basel", longitude: 7.5775, latitude: 47.552 },
   {
     id: "rhine_bridge",
     name: "Rhine Bridge",
@@ -167,7 +155,6 @@ const clusterLayer = {
   },
 };
 
-// Layer style for cluster counts
 const clusterCountLayer = {
   id: "cluster-count",
   type: "symbol",
@@ -182,29 +169,27 @@ const clusterCountLayer = {
   },
 };
 
-// Updated layer style for unclustered points (now using SVG marker)
 const unclusteredPointLayer = {
   id: "unclustered-point",
-  type: "symbol", // Changed from 'circle' to 'symbol'
+  type: "symbol",
   filter: ["!", ["has", "point_count"]],
   layout: {
-    "icon-image": "custom-red-marker", // This name must match the name used in map.addImage()
-    "icon-size": 0.75, // Adjust size as needed. SVGs can sometimes render larger than expected.
-    "icon-allow-overlap": true, // Prevents icons from hiding each other
-    "icon-anchor": "bottom", // Anchors the bottom of the icon to the geographic point
+    "icon-image": "custom-red-marker",
+    "icon-size": 0.75,
+    "icon-allow-overlap": true,
+    "icon-anchor": "bottom",
   },
-  // 'paint' properties for circle are removed as we are using an icon now.
 };
 
 const MapComponent = ({ mapboxAccessToken }) => {
+  // mapboxAccessToken is now a prop
   const mapboxStyleUrl =
-    "mapbox://styles/faizajarin12/cm8pfng64006y01sh6hjsgmc6";
+    "mapbox://styles/faizajarin12/cm8pfng64006y01sh6hjsgmc6"; // Hardcoded as in your snippet
 
   const mapRef = useRef(null);
   const [popupInfo, setPopupInfo] = useState(null);
-  const [isStyleLoaded, setIsStyleLoaded] = useState(false); // Track if the map style and our custom image are loaded
+  const [isStyleLoaded, setIsStyleLoaded] = useState(false);
 
-  // Memoize GeoJSON data
   const geoJsonData = useMemo(() => {
     return {
       type: "FeatureCollection",
@@ -219,36 +204,33 @@ const MapComponent = ({ mapboxAccessToken }) => {
     };
   }, []);
 
-  // Callback for when the map loads
   const onMapLoad = useCallback(() => {
-    const map = mapRef.current?.getMap(); // Use optional chaining
+    const map = mapRef.current?.getMap();
     if (!map) {
       console.error("Map instance not available on load.");
       return;
     }
 
-    // Create an HTMLImageElement to load the SVG
-    const image = new Image(48, 48); // Specify dimensions from SVG
+    const image = new Image(48, 48);
     image.onload = () => {
-      if (!map.hasImage("custom-red-marker")) {
-        map.addImage("custom-red-marker", image, { sdf: false }); // sdf: false for raster images/complex SVGs
+      if (map && map.style && !map.hasImage("custom-red-marker")) {
+        // Added map.style check
+        map.addImage("custom-red-marker", image, { sdf: false });
         console.log("Custom marker image added to map.");
       }
-      setIsStyleLoaded(true); // Signal that our custom image is ready
+      setIsStyleLoaded(true);
     };
     image.onerror = (e) => {
       console.error("Error loading SVG marker image:", e);
-      setIsStyleLoaded(true); // Still set to true to allow other layers to render
+      setIsStyleLoaded(true);
     };
 
-    // Convert SVG string to a data URL
     const svgBlob = new Blob([redMarkerSvgString.trim()], {
       type: "image/svg+xml",
     });
     image.src = URL.createObjectURL(svgBlob);
   }, []);
 
-  // Handle clicks on the map
   const handleMapClick = useCallback((event) => {
     const features = event.features;
     if (!features || features.length === 0) {
@@ -256,13 +238,15 @@ const MapComponent = ({ mapboxAccessToken }) => {
       return;
     }
     const clickedFeature = features[0];
+    const map = mapRef.current?.getMap(); // Use optional chaining
+
+    if (!map) return; // Guard if map is not available
 
     if (clickedFeature.layer.id === "clusters") {
       const clusterId = clickedFeature.properties.cluster_id;
-      const map = mapRef.current.getMap();
-      map
-        .getSource("locations-source")
-        .getClusterExpansionZoom(clusterId, (err, zoom) => {
+      const source = map.getSource("locations-source");
+      if (source && typeof source.getClusterExpansionZoom === "function") {
+        source.getClusterExpansionZoom(clusterId, (err, zoom) => {
           if (err) {
             console.error("Error getting cluster expansion zoom:", err);
             return;
@@ -273,6 +257,11 @@ const MapComponent = ({ mapboxAccessToken }) => {
             duration: 500,
           });
         });
+      } else {
+        console.error(
+          "locations-source not found or does not support getClusterExpansionZoom"
+        );
+      }
       setPopupInfo(null);
     } else if (clickedFeature.layer.id === "unclustered-point") {
       setPopupInfo({
@@ -285,7 +274,6 @@ const MapComponent = ({ mapboxAccessToken }) => {
     }
   }, []);
 
-  // Handle mouse enter/leave for cursor changes
   const handleMouseEnter = useCallback((event) => {
     if (
       event.features &&
@@ -293,15 +281,17 @@ const MapComponent = ({ mapboxAccessToken }) => {
         (f) => f.layer.id === "clusters" || f.layer.id === "unclustered-point"
       )
     ) {
-      mapRef.current.getCanvas().style.cursor = "pointer";
+      if (mapRef.current) mapRef.current.getCanvas().style.cursor = "pointer";
     }
   }, []);
 
   const handleMouseLeave = useCallback(() => {
-    mapRef.current.getCanvas().style.cursor = "";
+    if (mapRef.current) mapRef.current.getCanvas().style.cursor = "";
   }, []);
 
-  if (mapboxAccessToken === "YOUR_MAPBOX_ACCESS_TOKEN") {
+  // Check if mapboxAccessToken is provided (especially if it's expected as a prop)
+  if (!mapboxAccessToken || mapboxAccessToken === "YOUR_MAPBOX_ACCESS_TOKEN") {
+    // Adjusted the condition to check for missing or placeholder token when passed as prop
     return (
       <div
         style={{
@@ -318,11 +308,39 @@ const MapComponent = ({ mapboxAccessToken }) => {
         }}
       >
         <p style={{ color: "red", fontWeight: "bold", fontSize: "1.2em" }}>
-          Configuration Error: Mapbox Access Token is missing.
+          Configuration Error: Mapbox Access Token is missing or invalid.
           <br />
           <small style={{ color: "#555", fontWeight: "normal" }}>
-            Please set VITE_MAPBOX_ACCESS_TOKEN in your .env file or update the
-            placeholder.
+            Please ensure a valid Mapbox Access Token is provided to the
+            MapComponent.
+          </small>
+        </p>
+      </div>
+    );
+  }
+
+  // If Map component itself is undefined, we can't render it.
+  if (!Map) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100vh",
+          backgroundColor: "#fee",
+          padding: "20px",
+          textAlign: "center",
+          fontFamily: "Arial, sans-serif",
+          color: "darkred",
+        }}
+      >
+        <p style={{ fontWeight: "bold", fontSize: "1.2em" }}>
+          Critical Error: The Map component could not be loaded.
+          <br />
+          <small>
+            This might be due to an issue with the 'react-map-gl' installation
+            or import. Check the console for details from the import log.
           </small>
         </p>
       </div>
@@ -339,7 +357,7 @@ const MapComponent = ({ mapboxAccessToken }) => {
     >
       <Map
         ref={mapRef}
-        mapboxAccessToken={mapboxAccessToken}
+        mapboxAccessToken={mapboxAccessToken} // Use the prop
         initialViewState={{
           longitude: 7.7316678383802,
           latitude: 47.484317755158,
@@ -347,17 +365,18 @@ const MapComponent = ({ mapboxAccessToken }) => {
         }}
         style={{ width: "100%", height: "100%" }}
         mapStyle={mapboxStyleUrl}
-        onLoad={onMapLoad} // Call onMapLoad when the map's style is loaded
+        onLoad={onMapLoad}
         onClick={handleMapClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         interactiveLayerIds={["clusters", "unclustered-point"]}
         attributionControl={false}
       >
-        <AttributionControl customAttribution="Map data &copy; OpenStreetMap contributors" />
+        {AttributionControl && (
+          <AttributionControl customAttribution="Map data &copy; OpenStreetMap contributors" />
+        )}
 
-        {/* Source and Layers are only rendered once the style (and our custom image) is loaded */}
-        {isStyleLoaded && (
+        {isStyleLoaded && Source && Layer && (
           <Source
             id="locations-source"
             type="geojson"
@@ -368,19 +387,18 @@ const MapComponent = ({ mapboxAccessToken }) => {
           >
             <Layer {...clusterLayer} />
             <Layer {...clusterCountLayer} />
-            <Layer {...unclusteredPointLayer} />{" "}
-            {/* This layer now uses the SVG icon */}
+            <Layer {...unclusteredPointLayer} />
           </Source>
         )}
 
-        {popupInfo && (
+        {popupInfo && Popup && (
           <Popup
             longitude={popupInfo.longitude}
             latitude={popupInfo.latitude}
-            anchor="bottom" // Anchor popup to the bottom of the icon for better placement
+            anchor="bottom"
             onClose={() => setPopupInfo(null)}
             closeOnClick={false}
-            offset={15} // Adjust offset if needed with the new icon
+            offset={15}
             style={{
               borderRadius: "8px",
               boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
