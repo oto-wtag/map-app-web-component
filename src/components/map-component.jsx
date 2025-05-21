@@ -142,7 +142,7 @@ const MapComponent = ({ mapboxAccessToken }) => {
     mapRef.current = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: "mapbox://styles/faizajarin12/cm8pfng64006y01sh6hjsgmc6",
-      center: [47.484317755158, 7.7316678383802],
+      center: [7.7316678383802, 47.484317755158],
       zoom: 6.5,
     });
 
