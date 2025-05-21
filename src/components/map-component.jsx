@@ -167,30 +167,33 @@ const clusterLayer = {
   },
 };
 
+// Layer style for cluster counts
 const clusterCountLayer = {
   id: "cluster-count",
   type: "symbol",
   filter: ["has", "point_count"],
   layout: {
-    "text-field": "{point_count_abbreviated}", // Using template string for field
-    "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"], // Ensure fonts are available
+    "text-field": "{point_count_abbreviated}",
+    "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
     "text-size": 12,
   },
   paint: {
-    "text-color": "#ffffff", // White text for better contrast on cluster circles
+    "text-color": "#ffffff",
   },
 };
 
+// Updated layer style for unclustered points (now using SVG marker)
 const unclusteredPointLayer = {
   id: "unclustered-point",
-  type: "circle",
+  type: "symbol", // Changed from 'circle' to 'symbol'
   filter: ["!", ["has", "point_count"]],
-  paint: {
-    "circle-color": "#11b4da",
-    "circle-radius": 6, // Adjusted for better visibility
-    "circle-stroke-width": 1,
-    "circle-stroke-color": "#fff",
+  layout: {
+    "icon-image": "custom-red-marker", // This name must match the name used in map.addImage()
+    "icon-size": 0.75, // Adjust size as needed. SVGs can sometimes render larger than expected.
+    "icon-allow-overlap": true, // Prevents icons from hiding each other
+    "icon-anchor": "bottom", // Anchors the bottom of the icon to the geographic point
   },
+  // 'paint' properties for circle are removed as we are using an icon now.
 };
 
 const MapComponent = ({ mapboxAccessToken }) => {
