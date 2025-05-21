@@ -14,6 +14,16 @@ import Map, {
 } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 
+const redMarkerSvgString = `
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48px" height="48px">
+    <path
+      fill="#FF0000" stroke="#FFFFFF" stroke-width="1"
+      d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
+    />
+    <circle fill="#B00000" cx="12" cy="9.5" r="2.5" />
+  </svg>
+`;
+
 const allLocations = [
   {
     id: "basel_mitte",
@@ -189,7 +199,9 @@ const MapComponent = ({ mapboxAccessToken }) => {
 
   const mapRef = useRef(null);
   const [popupInfo, setPopupInfo] = useState(null);
+  const [isStyleLoaded, setIsStyleLoaded] = useState(false); // Track if the map style and our custom image are loaded
 
+  // Memoize GeoJSON data
   const geoJsonData = useMemo(() => {
     return {
       type: "FeatureCollection",
@@ -204,20 +216,47 @@ const MapComponent = ({ mapboxAccessToken }) => {
     };
   }, []);
 
-  const handleMapClick = useCallback((event) => {
-    const features = event.features;
-    if (!features || features.length === 0) {
-      setPopupInfo(null); // Close popup if clicking on empty map area
+  // Callback for when the map loads
+  const onMapLoad = useCallback(() => {
+    const map = mapRef.current?.getMap(); // Use optional chaining
+    if (!map) {
+      console.error("Map instance not available on load.");
       return;
     }
 
+    // Create an HTMLImageElement to load the SVG
+    const image = new Image(48, 48); // Specify dimensions from SVG
+    image.onload = () => {
+      if (!map.hasImage("custom-red-marker")) {
+        map.addImage("custom-red-marker", image, { sdf: false }); // sdf: false for raster images/complex SVGs
+        console.log("Custom marker image added to map.");
+      }
+      setIsStyleLoaded(true); // Signal that our custom image is ready
+    };
+    image.onerror = (e) => {
+      console.error("Error loading SVG marker image:", e);
+      setIsStyleLoaded(true); // Still set to true to allow other layers to render
+    };
+
+    // Convert SVG string to a data URL
+    const svgBlob = new Blob([redMarkerSvgString.trim()], {
+      type: "image/svg+xml",
+    });
+    image.src = URL.createObjectURL(svgBlob);
+  }, []);
+
+  // Handle clicks on the map
+  const handleMapClick = useCallback((event) => {
+    const features = event.features;
+    if (!features || features.length === 0) {
+      setPopupInfo(null);
+      return;
+    }
     const clickedFeature = features[0];
 
-    // If a cluster is clicked, zoom into it
     if (clickedFeature.layer.id === "clusters") {
       const clusterId = clickedFeature.properties.cluster_id;
-      const map = mapRef.current.getMap(); // Get the underlying Mapbox GL JS map instance
-
+      const map = mapRef.current.getMap();
       map
         .getSource("locations-source")
         .getClusterExpansionZoom(clusterId, (err, zoom) => {
@@ -231,20 +270,19 @@ const MapComponent = ({ mapboxAccessToken }) => {
             duration: 500,
           });
         });
-      setPopupInfo(null); // Close any existing popup when zooming
-    }
-    // If an unclustered point is clicked, show a popup
-    else if (clickedFeature.layer.id === "unclustered-point") {
+      setPopupInfo(null);
+    } else if (clickedFeature.layer.id === "unclustered-point") {
       setPopupInfo({
         longitude: clickedFeature.geometry.coordinates[0],
         latitude: clickedFeature.geometry.coordinates[1],
         name: clickedFeature.properties.name,
       });
     } else {
-      setPopupInfo(null); // Close popup if clicking on something else
+      setPopupInfo(null);
     }
   }, []);
 
+  // Handle mouse enter/leave for cursor changes
   const handleMouseEnter = useCallback((event) => {
     if (
       event.features &&
@@ -256,23 +294,18 @@ const MapComponent = ({ mapboxAccessToken }) => {
     }
   }, []);
 
-  // Handle mouse leave events for cursor changes
   const handleMouseLeave = useCallback(() => {
     mapRef.current.getCanvas().style.cursor = "";
   }, []);
 
-  // Display an error message if the Mapbox token is a placeholder
   if (mapboxAccessToken === "YOUR_MAPBOX_ACCESS_TOKEN") {
-    console.error(
-      "Mapbox Access Token is not set. Please set VITE_MAPBOX_ACCESS_TOKEN in your .env file or replace the placeholder."
-    );
     return (
       <div
         style={{
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          height: "100vh", // Use vh for full viewport height
+          height: "100vh",
           backgroundColor: "#f0f0f0",
           padding: "20px",
           textAlign: "center",
@@ -285,8 +318,8 @@ const MapComponent = ({ mapboxAccessToken }) => {
           Configuration Error: Mapbox Access Token is missing.
           <br />
           <small style={{ color: "#555", fontWeight: "normal" }}>
-            Please set VITE_MAPBOX_ACCESS_TOKEN in your .env file (if using
-            Vite) or update the placeholder in the code.
+            Please set VITE_MAPBOX_ACCESS_TOKEN in your .env file or update the
+            placeholder.
           </small>
         </p>
       </div>
@@ -305,44 +338,46 @@ const MapComponent = ({ mapboxAccessToken }) => {
         ref={mapRef}
         mapboxAccessToken={mapboxAccessToken}
         initialViewState={{
-          longitude: 7.7316678383802, // Initial center (Basel Mitte)
+          longitude: 7.7316678383802,
           latitude: 47.484317755158,
-          zoom: 9, // Adjusted initial zoom to see more area
+          zoom: 9,
         }}
         style={{ width: "100%", height: "100%" }}
-        mapStyle={mapboxStyleUrl} // Your custom style or a default Mapbox style
+        mapStyle={mapboxStyleUrl}
+        onLoad={onMapLoad} // Call onMapLoad when the map's style is loaded
         onClick={handleMapClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        interactiveLayerIds={["clusters", "unclustered-point"]} // Optimize interactions
-        attributionControl={false} // Disable default attribution if adding custom
+        interactiveLayerIds={["clusters", "unclustered-point"]}
+        attributionControl={false}
       >
         <AttributionControl customAttribution="Map data &copy; OpenStreetMap contributors" />
-        <Source
-          id="locations-source" // Unique ID for the source
-          type="geojson"
-          data={geoJsonData}
-          cluster={true}
-          clusterMaxZoom={14} // Max zoom to cluster points on
-          clusterRadius={50} // Radius of each cluster when clustering points (defaults to 50)
-        >
-          {/* Layer for the clusters */}
-          <Layer {...clusterLayer} />
-          {/* Layer for the cluster counts */}
-          <Layer {...clusterCountLayer} />
-          {/* Layer for unclustered points */}
-          <Layer {...unclusteredPointLayer} />
-        </Source>
 
-        {/* Popup for unclustered points */}
+        {/* Source and Layers are only rendered once the style (and our custom image) is loaded */}
+        {isStyleLoaded && (
+          <Source
+            id="locations-source"
+            type="geojson"
+            data={geoJsonData}
+            cluster={true}
+            clusterMaxZoom={14}
+            clusterRadius={50}
+          >
+            <Layer {...clusterLayer} />
+            <Layer {...clusterCountLayer} />
+            <Layer {...unclusteredPointLayer} />{" "}
+            {/* This layer now uses the SVG icon */}
+          </Source>
+        )}
+
         {popupInfo && (
           <Popup
             longitude={popupInfo.longitude}
             latitude={popupInfo.latitude}
-            anchor="top" // Anchor popup above the point
-            onClose={() => setPopupInfo(null)} // Allow closing popup with its 'x' button
-            closeOnClick={false} // Keep popup open when map is clicked elsewhere (handled by handleMapClick)
-            offset={10} // Offset from the point
+            anchor="bottom" // Anchor popup to the bottom of the icon for better placement
+            onClose={() => setPopupInfo(null)}
+            closeOnClick={false}
+            offset={15} // Adjust offset if needed with the new icon
             style={{
               borderRadius: "8px",
               boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
